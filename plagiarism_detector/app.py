@@ -108,6 +108,21 @@ def compare_files():
                 detector.submissions[file2_path]
             )
             
+            # Calculate effective similarity
+            overall_sim = similarity['overall_similarity']
+            max_sim = similarity['max_similarity']
+            tree_sim = similarity['tree_edit_similarity']
+            
+            if tree_sim >= 0.85 and similarity.get('token_similarity', 0) < 0.5:
+                # Likely logical plagiarism case
+                effective_sim = (tree_sim * 0.7) + (max_sim * 0.3)
+            else:
+                # General case - use a blend of overall and max similarity
+                effective_sim = (overall_sim * 0.6) + (max_sim * 0.4)
+                
+            # Add effective similarity to the results
+            similarity['effective_similarity'] = effective_sim
+            
             # Store results in session
             session['comparison_result'] = {
                 'file1': os.path.basename(file1_path),
@@ -196,16 +211,26 @@ def analyze_directory():
             # Find similarities
             detector.find_similarities()
             
-            # Sort results by similarity
-            sorted_results = sorted(
-                detector.comparison_results,
-                key=lambda x: x['similarity_metrics']['overall_similarity'],
-                reverse=True
-            )
+            # Ensure all results have effective_similarity
+            for result in detector.comparison_results:
+                if 'effective_similarity' not in result:
+                    # Calculate it if missing
+                    overall_sim = result['overall_similarity']
+                    max_sim = result['max_similarity']
+                    tree_sim = result['similarity_metrics']['tree_edit_similarity']
+                    
+                    if tree_sim >= 0.85 and result['similarity_metrics'].get('token_similarity', 0) < 0.5:
+                        # Likely logical plagiarism case
+                        effective_sim = (tree_sim * 0.7) + (max_sim * 0.3)
+                    else:
+                        # General case - use a blend of overall and max similarity
+                        effective_sim = (overall_sim * 0.6) + (max_sim * 0.4)
+                    
+                    result['effective_similarity'] = effective_sim
             
             # Store results in session
             session['directory_results'] = {
-                'results': sorted_results,
+                'results': detector.comparison_results,
                 'file_count': len(cpp_files),
                 'timestamp': datetime.now().isoformat()
             }

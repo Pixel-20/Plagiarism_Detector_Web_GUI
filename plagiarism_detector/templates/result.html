@@ -62,6 +62,29 @@
         background-color: #17a2b8;
         border-radius: 5px;
     }
+    
+    .info-box {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+    }
+    
+    .flag-badge {
+        display: inline-block;
+        padding: 0.25em 0.6em;
+        font-size: 75%;
+        font-weight: 700;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 0.25rem;
+        background-color: #dc3545;
+        color: white;
+        margin: 0.2em;
+    }
 </style>
 {% endblock %}
 
@@ -83,29 +106,92 @@
                     </div>
                 </div>
                 
-                <h3 class="text-center mb-3">Overall Similarity</h3>
+                <!-- Flags Display -->
+                {% if result.similarity.flags and result.similarity.flags|length > 0 %}
+                <div class="mb-3">
+                    {% for flag in result.similarity.flags %}
+                    <span class="flag-badge">{{ flag|replace('_', ' ') }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 
-                {% set overall_similarity = result.similarity.overall_similarity * 100 %}
+                <h3 class="text-center mb-3">Effective Similarity</h3>
+                
+                {% set effective_similarity = result.similarity.effective_similarity * 100 %}
                 {% set similarity_class = "low-similarity" %}
-                {% if overall_similarity >= 70 %}
+                {% if effective_similarity >= 70 %}
                     {% set similarity_class = "high-similarity" %}
-                {% elif overall_similarity >= 40 %}
+                {% elif effective_similarity >= 40 %}
                     {% set similarity_class = "medium-similarity" %}
                 {% endif %}
                 
                 <div class="similarity-meter">
-                    <div class="similarity-value {{ similarity_class }}" style="width: {{ overall_similarity }}%">
-                        {{ "%.2f"|format(overall_similarity) }}%
+                    <div class="similarity-value {{ similarity_class }}" style="width: {{ effective_similarity }}%">
+                        {{ "%.2f"|format(effective_similarity) }}%
+                    </div>
+                </div>
+                <p class="text-muted text-center">
+                    <small>Effective similarity combines multiple metrics with emphasis on structural similarity for logical plagiarism detection</small>
+                </p>
+                
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h3 class="text-center mb-3">Overall Similarity</h3>
+                        
+                        {% set overall_similarity = result.similarity.overall_similarity * 100 %}
+                        {% set similarity_class = "low-similarity" %}
+                        {% if overall_similarity >= 70 %}
+                            {% set similarity_class = "high-similarity" %}
+                        {% elif overall_similarity >= 40 %}
+                            {% set similarity_class = "medium-similarity" %}
+                        {% endif %}
+                        
+                        <div class="similarity-meter">
+                            <div class="similarity-value {{ similarity_class }}" style="width: {{ overall_similarity }}%">
+                                {{ "%.2f"|format(overall_similarity) }}%
+                            </div>
+                        </div>
+                        <p class="text-muted text-center">
+                            <small>Weighted average of all similarity metrics</small>
+                        </p>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h3 class="text-center mb-3">Maximum Similarity</h3>
+                        
+                        {% set max_similarity = result.similarity.max_similarity * 100 %}
+                        {% set max_similarity_class = "low-similarity" %}
+                        {% if max_similarity >= 70 %}
+                            {% set max_similarity_class = "high-similarity" %}
+                        {% elif max_similarity >= 40 %}
+                            {% set max_similarity_class = "medium-similarity" %}
+                        {% endif %}
+                        
+                        <div class="similarity-meter">
+                            <div class="similarity-value {{ max_similarity_class }}" style="width: {{ max_similarity }}%">
+                                {{ "%.2f"|format(max_similarity) }}%
+                            </div>
+                        </div>
+                        <p class="text-muted text-center">
+                            <small>Highest score across all individual metrics</small>
+                        </p>
                     </div>
                 </div>
                 
-                {% if overall_similarity >= 70 %}
+                {% if effective_similarity >= 70 %}
                 <div class="warning-box">
                     <h4 class="text-danger">⚠️ High Similarity Detected</h4>
                     <p>
                         The files show a high degree of similarity, which may indicate code plagiarism.
                         Review the detailed metrics below to understand the specific similarities.
                     </p>
+                    
+                    {% if result.similarity.tree_edit_similarity * 100 >= 75 and result.similarity.token_similarity * 100 < 50 %}
+                    <p>
+                        <strong>Potential logical plagiarism detected:</strong> The code structure is very similar despite differences in variable names and syntax,
+                        suggesting the algorithm or solution approach may have been copied and modified.
+                    </p>
+                    {% endif %}
                 </div>
                 {% endif %}
                 
@@ -115,9 +201,22 @@
                     <div class="confidence-meter">
                         <div class="confidence-value" style="width: {{ result.similarity.confidence * 100 }}%"></div>
                     </div>
-                    <small class="text-muted">Higher confidence indicates more consistent similarity across different metrics</small>
+                    <small class="text-muted">Higher confidence indicates more consistent similarity across structural metrics</small>
                 </div>
                 {% endif %}
+                
+                <div class="info-box mt-3">
+                    <h5>Understanding the Similarity Metrics</h5>
+                    <p>
+                        <strong>Effective Similarity</strong> is optimized for detecting both direct and logical plagiarism by intelligently combining multiple metrics.
+                        <strong>Overall Similarity</strong> is a weighted average of all metrics, while <strong>Maximum Similarity</strong> shows the highest individual metric.
+                    </p>
+                    <p>
+                        <strong>Logical plagiarism</strong> occurs when the same algorithm or solution approach is used but with different variable names, 
+                        code structure, or implementation details. Our system is specifically designed to detect this type of plagiarism by analyzing 
+                        code structure and patterns rather than just matching text.
+                    </p>
+                </div>
                 
                 <h3 class="mt-4 mb-3">Detailed Metrics</h3>
                 
@@ -224,8 +323,10 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Animate the similarity meter on page load
         setTimeout(function() {
-            const similarityValue = document.querySelector('.similarity-value');
-            similarityValue.style.width = similarityValue.textContent.trim().replace('%', '') + '%';
+            const similarityValues = document.querySelectorAll('.similarity-value');
+            similarityValues.forEach(function(el) {
+                el.style.width = el.textContent.trim().replace('%', '') + '%';
+            });
         }, 100);
     });
 </script>

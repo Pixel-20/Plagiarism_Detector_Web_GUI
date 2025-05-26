@@ -128,7 +128,9 @@
                             <tr>
                                 <th>File 1</th>
                                 <th>File 2</th>
-                                <th>Similarity</th>
+                                <th>Overall Sim.</th>
+                                <th>Max Sim.</th>
+                                <th>Effective Sim.</th>
                                 <th>Confidence</th>
                                 <th>Token Sim.</th>
                                 <th>Structure Sim.</th>
@@ -138,23 +140,50 @@
                         <tbody>
                             {% for result in results.results %}
                                 {% set overall_similarity = result.similarity_metrics.overall_similarity * 100 %}
-                                {% set similarity_class = "low-similarity" %}
+                                {% set max_similarity = result.similarity_metrics.max_similarity * 100 if result.similarity_metrics.max_similarity is defined else result.max_similarity * 100 if result.max_similarity is defined else overall_similarity %}
+                                {% set effective_similarity = result.effective_similarity * 100 if result.effective_similarity is defined else overall_similarity %}
+                                
+                                {% set overall_similarity_class = "low-similarity" %}
                                 {% if overall_similarity >= 80 %}
-                                    {% set similarity_class = "high-similarity" %}
+                                    {% set overall_similarity_class = "high-similarity" %}
                                 {% elif overall_similarity >= 50 %}
-                                    {% set similarity_class = "medium-similarity" %}
+                                    {% set overall_similarity_class = "medium-similarity" %}
+                                {% endif %}
+                                
+                                {% set max_similarity_class = "low-similarity" %}
+                                {% if max_similarity >= 80 %}
+                                    {% set max_similarity_class = "high-similarity" %}
+                                {% elif max_similarity >= 50 %}
+                                    {% set max_similarity_class = "medium-similarity" %}
+                                {% endif %}
+                                
+                                {% set effective_similarity_class = "low-similarity" %}
+                                {% if effective_similarity >= 80 %}
+                                    {% set effective_similarity_class = "high-similarity" %}
+                                {% elif effective_similarity >= 50 %}
+                                    {% set effective_similarity_class = "medium-similarity" %}
                                 {% endif %}
                                 
                                 <tr data-similarity="{{ result.similarity_metrics.overall_similarity }}" 
                                     data-file1="{{ result.file1|basename }}" 
-                                    data-file2="{{ result.file2|basename }}">
+                                    data-file2="{{ result.file2|basename }}"
+                                    data-effective="{{ effective_similarity / 100 }}">
                                     <td>{{ result.file1|basename }}</td>
                                     <td>{{ result.file2|basename }}</td>
-                                    <td class="similarity-cell {{ similarity_class }}">{{ "%.2f"|format(overall_similarity) }}%</td>
+                                    <td class="similarity-cell {{ overall_similarity_class }}">{{ "%.2f"|format(overall_similarity) }}%</td>
+                                    <td class="similarity-cell {{ max_similarity_class }}">{{ "%.2f"|format(max_similarity) }}%</td>
+                                    <td class="similarity-cell {{ effective_similarity_class }}">{{ "%.2f"|format(effective_similarity) }}%</td>
                                     <td>{{ "%.2f"|format(result.similarity_metrics.confidence * 100) if result.similarity_metrics.confidence is defined else "N/A" }}%</td>
                                     <td>{{ "%.2f"|format(result.similarity_metrics.token_similarity * 100) if result.similarity_metrics.token_similarity is defined else "N/A" }}%</td>
                                     <td>{{ "%.2f"|format(result.similarity_metrics.tree_edit_similarity * 100) if result.similarity_metrics.tree_edit_similarity is defined else "N/A" }}%</td>
                                     <td>
+                                        {% if result.flags and result.flags|length > 0 %}
+                                            <div class="flags mb-2">
+                                                {% for flag in result.flags %}
+                                                    <span class="badge bg-danger">{{ flag|replace('_', ' ') }}</span>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
                                         <button class="btn btn-sm btn-outline-primary view-details-btn" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#detailsModal"
@@ -312,7 +341,7 @@
             const visibleRows = Array.from(tableRows).filter(row => {
                 const file1 = row.getAttribute('data-file1').toLowerCase();
                 const file2 = row.getAttribute('data-file2').toLowerCase();
-                const similarity = parseFloat(row.getAttribute('data-similarity'));
+                const similarity = parseFloat(row.getAttribute('data-effective'));
                 const filterText = fileFilter.value.toLowerCase();
                 
                 return (file1.includes(filterText) || file2.includes(filterText)) && 
@@ -353,7 +382,7 @@
             const visibleRows = Array.from(tableRows).filter(row => {
                 const file1 = row.getAttribute('data-file1').toLowerCase();
                 const file2 = row.getAttribute('data-file2').toLowerCase();
-                const similarity = parseFloat(row.getAttribute('data-similarity'));
+                const similarity = parseFloat(row.getAttribute('data-effective'));
                 const filterText = fileFilter.value.toLowerCase();
                 
                 return (file1.includes(filterText) || file2.includes(filterText)) && 
@@ -377,91 +406,83 @@
                 // Clear previous metrics
                 metricsContainer.innerHTML = '';
                 
-                // Add overall similarity
-                addMetricCard('Overall Similarity', 
-                              (similarityData.overall_similarity * 100).toFixed(2) + '%',
-                              'Weighted combination of all metrics');
+                // Add overall and max similarity first
+                const overallMetric = createMetricCard('Overall Similarity', similarityData.overall_similarity);
+                metricsContainer.appendChild(overallMetric);
                 
-                // Add confidence if available
-                if (similarityData.confidence !== undefined) {
-                    addMetricCard('Confidence', 
-                                  (similarityData.confidence * 100).toFixed(2) + '%',
-                                  'Consistency across different metrics');
-                }
+                const maxMetric = createMetricCard('Maximum Similarity', similarityData.max_similarity);
+                metricsContainer.appendChild(maxMetric);
                 
-                // Add token similarity if available
+                // Add individual metrics
                 if (similarityData.token_similarity !== undefined) {
-                    addMetricCard('Token Similarity', 
-                                  (similarityData.token_similarity * 100).toFixed(2) + '%',
-                                  'Based on normalized code tokens');
+                    const tokenMetric = createMetricCard('Token Similarity', similarityData.token_similarity);
+                    metricsContainer.appendChild(tokenMetric);
                 }
                 
-                // Add sequence similarity if available
                 if (similarityData.sequence_similarity !== undefined) {
-                    addMetricCard('Sequence Similarity', 
-                                  (similarityData.sequence_similarity * 100).toFixed(2) + '%',
-                                  'Based on token sequences');
+                    const seqMetric = createMetricCard('Sequence Similarity', similarityData.sequence_similarity);
+                    metricsContainer.appendChild(seqMetric);
                 }
                 
-                // Add tree edit similarity if available
                 if (similarityData.tree_edit_similarity !== undefined) {
-                    addMetricCard('Structure Similarity', 
-                                  (similarityData.tree_edit_similarity * 100).toFixed(2) + '%',
-                                  'Based on code structure');
+                    const treeMetric = createMetricCard('Structure Similarity', similarityData.tree_edit_similarity);
+                    metricsContainer.appendChild(treeMetric);
                 }
                 
-                // Add subtree hash similarity if available
                 if (similarityData.subtree_hash_similarity !== undefined) {
-                    addMetricCard('Subtree Similarity', 
-                                  (similarityData.subtree_hash_similarity * 100).toFixed(2) + '%',
-                                  'Based on code subtrees');
+                    const hashMetric = createMetricCard('Subtree Similarity', similarityData.subtree_hash_similarity);
+                    metricsContainer.appendChild(hashMetric);
                 }
                 
-                // Add structure similarity if available
                 if (similarityData.structure_similarity !== undefined) {
-                    addMetricCard('Graph Similarity', 
-                                  (similarityData.structure_similarity * 100).toFixed(2) + '%',
-                                  'Based on control flow');
+                    const structMetric = createMetricCard('Graph Similarity', similarityData.structure_similarity);
+                    metricsContainer.appendChild(structMetric);
                 }
                 
-                // Add complexity similarity if available
                 if (similarityData.complexity_similarity !== undefined) {
-                    addMetricCard('Complexity Similarity', 
-                                  (similarityData.complexity_similarity * 100).toFixed(2) + '%',
-                                  'Based on algorithmic complexity');
+                    const complexMetric = createMetricCard('Complexity Similarity', similarityData.complexity_similarity);
+                    metricsContainer.appendChild(complexMetric);
+                }
+                
+                if (similarityData.flags && similarityData.flags.length > 0) {
+                    const flagsDiv = document.createElement('div');
+                    flagsDiv.className = 'col-12 mt-3';
+                    flagsDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h5>Flags:</h5>
+                            <ul>
+                                ${similarityData.flags.map(flag => `<li>${flag.replace(/_/g, ' ')}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                    metricsContainer.appendChild(flagsDiv);
                 }
             });
         });
         
-        function addMetricCard(title, value, description) {
+        // Helper function to create metric card
+        function createMetricCard(title, value) {
             const col = document.createElement('div');
-            col.className = 'col-md-6 mb-3';
+            col.className = 'col-md-4 mb-3';
             
-            const card = document.createElement('div');
-            card.className = 'card h-100';
+            const percentage = (value * 100).toFixed(2);
+            let colorClass = 'text-success';
+            if (percentage >= 80) {
+                colorClass = 'text-danger';
+            } else if (percentage >= 50) {
+                colorClass = 'text-warning';
+            }
             
-            const cardBody = document.createElement('div');
-            cardBody.className = 'card-body text-center';
+            col.innerHTML = `
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">${title}</h5>
+                        <div class="display-4 ${colorClass}">${percentage}%</div>
+                    </div>
+                </div>
+            `;
             
-            const cardTitle = document.createElement('h5');
-            cardTitle.className = 'card-title';
-            cardTitle.textContent = title;
-            
-            const cardValue = document.createElement('div');
-            cardValue.className = 'display-6';
-            cardValue.textContent = value;
-            
-            const cardText = document.createElement('p');
-            cardText.className = 'card-text text-muted small';
-            cardText.textContent = description;
-            
-            cardBody.appendChild(cardTitle);
-            cardBody.appendChild(cardValue);
-            cardBody.appendChild(cardText);
-            card.appendChild(cardBody);
-            col.appendChild(card);
-            
-            metricsContainer.appendChild(col);
+            return col;
         }
         
         // Initialize the page

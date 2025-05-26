@@ -247,20 +247,74 @@ class ASTAnalyzer:
         """Compute a hash for the subtree rooted at node."""
         # Get node data
         data = self.ast_graph.nodes[node]
-        node_str = f"{data.get('kind', '')}_{data.get('spelling', '')}"
+        
+        # Use generic labels for consistent hashing
+        node_str = self._get_node_generic_label(data)
         
         # Get children
         children = list(self.ast_graph.successors(node))
-        child_hashes = [self._hash_subtree(child) for child in children]
+        
+        # Sort children by their generic labels to ensure consistent ordering
+        # This helps detect similar structures even if child order differs
+        children_with_labels = [(child, self._get_node_generic_label(self.ast_graph.nodes[child])) for child in children]
+        sorted_children = [child for child, _ in sorted(children_with_labels, key=lambda x: x[1])]
+        
+        # Get hashes for sorted children
+        child_hashes = [self._hash_subtree(child) for child in sorted_children]
         
         # Combine node and child hashes
         combined = node_str + '_'.join(map(str, sorted(child_hashes)))
         return hash(combined)
     
+    def _get_node_generic_label(self, node_data: Dict) -> str:
+        """Generate a generic label for AST nodes that's resilient to minor code changes."""
+        kind = node_data.get('kind', 'UNKNOWN')
+        spelling = node_data.get('spelling', '')
+
+        if kind == 'CONTROL_STMT':
+            # Extract the control keyword (for, while, if, etc.)
+            control_keyword = spelling.split('(')[0].strip().split()[-1] if '(' in spelling else spelling.strip().split()[-1]
+            
+            # Normalize all loop constructs to a generic LOOP label
+            if control_keyword in ['for', 'while', 'do', 'foreach']: 
+                return f"LOOP_CONSTRUCT"
+                
+            # Normalize all conditional constructs
+            if control_keyword in ['if', 'else', 'switch', 'case', 'ternary']:
+                return f"CONDITIONAL_CONSTRUCT"
+                
+            # Default case
+            return f"{kind}_GENERIC"
+            
+        elif kind == 'FUNCTION_DECL':
+            # For function declarations, just use the generic type
+            # This makes it more resilient to function name changes
+            return f"FUNCTION_CONSTRUCT"
+            
+        elif kind == 'CLASS_DECL':
+            # For class declarations, just use the generic type
+            return f"CLASS_CONSTRUCT"
+            
+        elif kind == 'COMPOUND_STMT' or spelling == '{' or spelling == '}':
+            # Generic label for code blocks
+            return f"BLOCK_CONSTRUCT"
+            
+        # For expressions and operators, generalize based on type
+        elif 'expr' in kind.lower() or kind in ['BINARY_OPERATOR', 'UNARY_OPERATOR']:
+            return f"EXPRESSION_CONSTRUCT"
+            
+        # For variable declarations, use a generic label
+        elif 'decl' in kind.lower() or 'var' in kind.lower():
+            return f"VARIABLE_CONSTRUCT"
+            
+        # For other kinds, if spelling is too specific or not useful, just use kind
+        return f"{kind}_GENERIC"
+
     def _to_zss_tree(self, node) -> Node:
         """Convert AST node to format suitable for tree comparison."""
         data = self.ast_graph.nodes[node]
-        label = f"{data.get('kind', '')}_{data.get('spelling', '')}"
+        # Use generic label
+        label = self._get_node_generic_label(data)
         
         children = [self._to_zss_tree(child) for child in self.ast_graph.successors(node)]
         return Node(label, children)
@@ -327,7 +381,7 @@ class ScalableSimilarityAnalyzer:
     
     @staticmethod
     def compute_tree_distance(tree1: Node, tree2: Node) -> float:
-        """Compute normalized tree edit distance."""
+        """Compute normalized tree edit distance with optimized matching."""
         def tree_size(node):
             if node._size is not None:
                 return node._size
@@ -339,11 +393,41 @@ class ScalableSimilarityAnalyzer:
         size1 = tree_size(tree1)
         size2 = tree_size(tree2)
         
-        # If sizes are very different, we can short-circuit
-        if abs(size1 - size2) / max(size1, size2) > 0.5:
+        # If sizes are extremely different, we can short-circuit
+        # But use a more lenient threshold (0.9 instead of 0.8)
+        if abs(size1 - size2) / max(size1, size2) > 0.9:
             return 0.0
+            
+        # Extract node type from label (first part before underscore)
+        def get_node_type(label):
+            # For our new consistent labels, we can just use the whole label
+            if any(label.startswith(prefix) for prefix in ["LOOP_", "CONDITIONAL_", "FUNCTION_", "CLASS_", "BLOCK_", "EXPRESSION_", "VARIABLE_"]):
+                return label
+            return label.split('_')[0] if '_' in label else label
+            
+        # Count node types in trees (for structural similarity)
+        def count_node_types(node, counts=None):
+            if counts is None:
+                counts = {}
+            
+            node_type = get_node_type(node.label)
+            counts[node_type] = counts.get(node_type, 0) + 1
+            
+            for child in node.children:
+                count_node_types(child, counts)
+            
+            return counts
+            
+        # Get node type distributions
+        types1 = count_node_types(tree1)
+        types2 = count_node_types(tree2)
         
-        # Simple tree distance calculation
+        # Calculate node type distribution similarity
+        all_types = set(types1.keys()) | set(types2.keys())
+        type_sim = sum(min(types1.get(t, 0), types2.get(t, 0)) for t in all_types) / \
+                  sum(max(types1.get(t, 0), types2.get(t, 0)) for t in all_types) if all_types else 0
+        
+        # Simple tree distance calculation with memoization
         def simple_distance(t1, t2, memo=None):
             if memo is None:
                 memo = {}
@@ -354,32 +438,53 @@ class ScalableSimilarityAnalyzer:
             
             # If one tree is empty, return size of other tree
             if not t1.children and not t2.children:
-                result = 0 if t1.label == t2.label else 1
+                # For leaf nodes, exact match is best but partial match is possible
+                # if labels share the same prefix (e.g., CONTROL_STMT_*)
+                if t1.label == t2.label:
+                    result = 0  # Perfect match
+                elif get_node_type(t1.label) == get_node_type(t2.label):
+                    result = 0.2  # Same type, different details - reduced penalty further
+                else:
+                    result = 0.8  # Different types - reduced penalty
                 memo[key] = result
                 return result
             
             # Calculate cost of replacing root
-            replace_cost = 0 if t1.label == t2.label else 1
+            # More lenient matching - if labels share the same prefix, partial match
+            if t1.label == t2.label:
+                replace_cost = 0  # Perfect match
+            elif get_node_type(t1.label) == get_node_type(t2.label):
+                replace_cost = 0.2  # Same type, different details - reduced penalty
+            else:
+                replace_cost = 0.8  # Different types - reduced penalty
             
             # Calculate cost of matching children
             if not t1.children:
-                result = replace_cost + len(t2.children)
+                result = replace_cost + len(t2.children) * 0.5  # Further reduced penalty
                 memo[key] = result
                 return result
             
             if not t2.children:
-                result = replace_cost + len(t1.children)
+                result = replace_cost + len(t1.children) * 0.5  # Further reduced penalty
                 memo[key] = result
                 return result
             
-            # Try to match children
-            min_cost = float('inf')
-            for i, c1 in enumerate(t1.children):
-                for j, c2 in enumerate(t2.children):
+            # Try to match children - improved algorithm to find best matches
+            # This is an approximation of the optimal assignment problem
+            costs = []
+            for c1 in t1.children:
+                c1_costs = []
+                for c2 in t2.children:
                     cost = simple_distance(c1, c2, memo)
-                    min_cost = min(min_cost, cost)
+                    c1_costs.append(cost)
+                costs.append(min(c1_costs) if c1_costs else 0)
             
-            result = replace_cost + abs(len(t1.children) - len(t2.children)) + min_cost
+            child_match_cost = sum(costs)
+            
+            # Penalize different number of children, but less severely
+            child_count_penalty = abs(len(t1.children) - len(t2.children)) * 0.3  # Further reduced penalty
+            
+            result = replace_cost + child_match_cost + child_count_penalty
             memo[key] = result
             return result
         
@@ -387,8 +492,15 @@ class ScalableSimilarityAnalyzer:
         distance = simple_distance(tree1, tree2)
         max_size = max(size1, size2)
         
-        # Normalize
-        return 1 - (distance / max_size)
+        # Normalize and invert (0 = completely different, 1 = identical)
+        # More lenient normalization and incorporate type distribution similarity
+        edit_sim = 1 - (distance / (max_size * 2.0))  # Even more lenient normalization
+        
+        # Combine edit distance with type distribution similarity
+        combined_sim = (edit_sim * 0.7) + (type_sim * 0.3)
+        
+        # Clamp to [0, 1]
+        return max(0, min(1, combined_sim))
     
     @staticmethod
     def compute_cfg_similarity(cfg1: nx.DiGraph, cfg2: nx.DiGraph) -> float:
@@ -470,6 +582,31 @@ class ScalableSimilarityAnalyzer:
             hashes2 = set(submission2['ast_features']['subtree_hashes'].values())
             hash_sim = len(hashes1.intersection(hashes2)) / len(hashes1.union(hashes2)) if hashes1 or hashes2 else 0
             
+            # Enhanced subtree similarity - consider partial matches
+            # Get the most frequent subtree patterns
+            hash_freq1 = {}
+            for h in submission1['ast_features']['subtree_hashes'].values():
+                hash_freq1[h] = hash_freq1.get(h, 0) + 1
+                
+            hash_freq2 = {}
+            for h in submission2['ast_features']['subtree_hashes'].values():
+                hash_freq2[h] = hash_freq2.get(h, 0) + 1
+            
+            # Get top patterns by frequency
+            top_patterns1 = sorted(hash_freq1.items(), key=lambda x: x[1], reverse=True)[:min(20, len(hash_freq1))]
+            top_patterns2 = sorted(hash_freq2.items(), key=lambda x: x[1], reverse=True)[:min(20, len(hash_freq2))]
+            
+            # Calculate similarity of top patterns
+            top_hashes1 = {h for h, _ in top_patterns1}
+            top_hashes2 = {h for h, _ in top_patterns2}
+            
+            # Enhanced similarity calculation
+            common_top = len(top_hashes1.intersection(top_hashes2))
+            total_top = len(top_hashes1.union(top_hashes2))
+            
+            # Weight the top patterns more heavily
+            enhanced_hash_sim = (hash_sim * 0.4) + (common_top / total_top * 0.6) if total_top > 0 else hash_sim
+            
             # Structure similarity
             struct1 = submission1['ast_features']['graph_structure']
             struct2 = submission2['ast_features']['graph_structure']
@@ -482,40 +619,74 @@ class ScalableSimilarityAnalyzer:
                 submission2['ast_features'].get('complexity', {'time_complexity': 'O(1)', 'loop_count': 0, 'max_nesting': 0})
             )
             
-            # Weighted combination with enhanced weights
+            # CFG similarity
+            # Assuming cfg_graph is available in ast_features or submission directly
+            # If ASTAnalyzer.analyze doesn't provide this, this will default to 0 or raise an error if keys are missing.
+            cfg1 = submission1['ast_features'].get('cfg_graph', nx.DiGraph()) # Default to empty graph
+            cfg2 = submission2['ast_features'].get('cfg_graph', nx.DiGraph()) # Default to empty graph
+            if not isinstance(cfg1, nx.DiGraph): cfg1 = nx.DiGraph() # Ensure it's a graph
+            if not isinstance(cfg2, nx.DiGraph): cfg2 = nx.DiGraph() # Ensure it's a graph
+            
+            cfg_sim = ScalableSimilarityAnalyzer.compute_cfg_similarity(cfg1, cfg2)
+            
+            # Weighted combination with optimized weights
             weights = {
-                'token': 0.3,
-                'sequence': 0.2,
-                'tree': 0.2,
-                'hash': 0.15,
-                'structure': 0.05,
-                'complexity': 0.1
+                'token': 0.10,       # Reduced - less important for logical plagiarism
+                'sequence': 0.02,    # Further reduced - too sensitive to restructuring
+                'tree': 0.45,        # Further increased - most important for logical similarity
+                'hash': 0.25,        # Increased - now more effective with enhanced calculation
+                'cfg': 0.10,         # Reduced - less reliable than tree similarity
+                'structure': 0.05,   # Maintained - useful supplementary metric
+                'complexity': 0.03   # Reduced - less reliable than structural metrics
             }
             
-            overall_sim = (
-                weights['token'] * token_sim +
-                weights['sequence'] * sequence_sim +
-                weights['tree'] * tree_sim +
-                weights['hash'] * hash_sim +
-                weights['structure'] * struct_sim +
-                weights['complexity'] * complexity_sim
-            )
+            # Calculate overall similarity using weighted average
+            metrics = [token_sim, sequence_sim, tree_sim, enhanced_hash_sim, cfg_sim, struct_sim, complexity_sim]
+            metric_weights = [weights['token'], weights['sequence'], weights['tree'], weights['hash'], 
+                             weights['cfg'], weights['structure'], weights['complexity']]
             
+            # Calculate weighted average
+            overall_sim = sum(m * w for m, w in zip(metrics, metric_weights))
+            
+            # Also track the maximum similarity for reference
+            max_sim = max(metrics) if metrics else 0.0
+            
+            # Flag suspicious similarities
+            flags = []
+            if max_sim >= 0.95:
+                flags.append("HIGHLY_SUSPICIOUS")
+            elif max_sim >= 0.85:
+                flags.append("SUSPICIOUS")
+                
+            # If any structural metric is high but token similarity is low, flag as potential logical plagiarism
+            if (tree_sim >= 0.75 or enhanced_hash_sim >= 0.75) and token_sim < 0.50:
+                flags.append("POTENTIAL_LOGICAL_PLAGIARISM")
+                
+            # If tree similarity is extremely high, flag regardless of token similarity
+            if tree_sim >= 0.90:
+                flags.append("STRUCTURAL_MATCH")
+                
             # Calculate confidence based on agreement of metrics
-            metrics = [token_sim, sequence_sim, tree_sim, hash_sim, struct_sim, complexity_sim]
-            avg = sum(metrics) / len(metrics)
-            variance = sum((m - avg) ** 2 for m in metrics) / len(metrics)
-            confidence = 1 - (variance * 2)  # Lower variance means higher confidence
+            # Focus on structural metrics for logical plagiarism
+            structural_metrics = [tree_sim, enhanced_hash_sim, cfg_sim]
+            structural_avg = sum(structural_metrics) / len(structural_metrics)
+            
+            # Higher confidence if structural metrics agree with each other
+            structural_variance = sum((m - structural_avg) ** 2 for m in structural_metrics) / len(structural_metrics)
+            confidence = 1 - (structural_variance * 2)  # Lower variance means higher confidence
             confidence = max(0, min(1, confidence))  # Clamp to [0,1]
             
             return {
                 'token_similarity': token_sim,
                 'sequence_similarity': sequence_sim,
                 'tree_edit_similarity': tree_sim,
-                'subtree_hash_similarity': hash_sim,
+                'subtree_hash_similarity': enhanced_hash_sim,
+                'cfg_similarity': cfg_sim,
                 'structure_similarity': struct_sim,
                 'complexity_similarity': complexity_sim,
                 'overall_similarity': overall_sim,
+                'max_similarity': max_sim,
+                'flags': flags,
                 'confidence': confidence
             }
             
@@ -619,12 +790,44 @@ class EnhancedPlagiarismDetector:
                     self.submissions[file2]
                 )
                 
-                if similarity['overall_similarity'] >= self.similarity_threshold:
+                # Determine if this pair exceeds threshold using either overall or max similarity
+                overall_sim = similarity['overall_similarity']
+                max_sim = similarity['max_similarity']
+                tree_sim = similarity['tree_edit_similarity']
+                
+                # Use a smarter approach to determine effective similarity
+                # - For logical plagiarism, tree similarity is more important
+                # - For direct copies, overall similarity is more important
+                # - Max similarity provides a good upper bound
+                
+                # Weight tree similarity higher for logical plagiarism detection
+                if tree_sim >= 0.85 and similarity.get('token_similarity', 0) < 0.5:
+                    # Likely logical plagiarism case
+                    effective_sim = (tree_sim * 0.7) + (max_sim * 0.3)
+                else:
+                    # General case - use a blend of overall and max similarity
+                    effective_sim = (overall_sim * 0.6) + (max_sim * 0.4)
+                
+                # Add flags for borderline cases
+                if 'flags' not in similarity:
+                    similarity['flags'] = []
+                    
+                if effective_sim >= self.similarity_threshold * 0.9 and effective_sim < self.similarity_threshold:
+                    similarity['flags'].append("BORDERLINE_SIMILARITY")
+                
+                if effective_sim >= self.similarity_threshold or "STRUCTURAL_MATCH" in similarity.get('flags', []):
                     self.comparison_results.append({
                         'file1': file1,
                         'file2': file2,
                         'similarity_metrics': similarity,
+                        'overall_similarity': overall_sim,
+                        'max_similarity': max_sim,
+                        'effective_similarity': effective_sim,
+                        'flags': similarity.get('flags', []),
                         'timestamp': datetime.now().isoformat()
                     })
+        
+        # Sort results by effective similarity (descending)
+        self.comparison_results.sort(key=lambda x: x['effective_similarity'], reverse=True)
         
         return self.comparison_results 
