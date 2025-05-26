@@ -1,150 +1,85 @@
-# Plagiarism Detection System for C/C++ Code
+# Plagiarism Detector
 
-A comprehensive system for detecting plagiarism in C/C++ code submissions using advanced code analysis techniques.
+## Description
+
+This project is a plagiarism detection tool designed to compare text documents and identify potential instances of plagiarism. It analyzes text similarity and provides a report on the findings.
 
 ## Features
 
-- **Multiple Detection Techniques**:
-  - Token-based analysis
-  - Abstract Syntax Tree (AST) comparison
-  - Control flow graph analysis
-  - Algorithmic complexity metrics
-
-- **Web Interface**:
-  - Upload and compare individual files
-  - Analyze entire directories
-  - View detailed similarity reports
-
-- **Machine Learning Integration**:
-  - Dataset generation for training
-  - Model training and optimization
-  - Improved detection accuracy
-
-## Installation
-
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/plagiarism-detector.git
-   cd plagiarism-detector
-   ```
-
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. Run the application:
-   ```
-   python run.py
-   ```
-
-## Usage
-
-### Web Interface
-
-Access the web interface by opening a browser and navigating to:
-```
-http://localhost:5000
-```
-
-### Command Line Interface
-
-The system provides several command-line tools:
-
-#### Compare two files:
-```
-python plagiarism_detector/apply_model.py compare file1.cpp file2.cpp
-```
-
-#### Analyze a directory:
-```
-python plagiarism_detector/apply_model.py analyze /path/to/directory
-```
-
-#### Compare two directories:
-```
-python plagiarism_detector/apply_model.py compare-dirs /path/to/dir1 /path/to/dir2
-```
-
-### Dataset Generation and Model Training
-
-The system includes tools for generating training datasets and training models:
-
-#### Generate a training dataset:
-```
-python plagiarism_detector/dataset_generator.py --output dataset --originals 20 --variants 7
-```
-
-#### Train a model:
-```
-python plagiarism_detector/model_trainer.py --dataset dataset --output trained_model
-```
-
-#### Run the complete training pipeline:
-```
-python plagiarism_detector/run_training.py --output-dir training --originals 20 --variants 7
-```
-
-## How It Works
-
-### Detection Process
-
-1. **Code Parsing**: Source files are parsed to extract tokens and build AST representations
-2. **Feature Extraction**: Multiple features are extracted from the code
-3. **Similarity Analysis**: Various similarity metrics are computed
-4. **Result Aggregation**: Results are combined using optimized weights
-
-### Training Process
-
-1. **Dataset Generation**: Creates original code samples and plagiarized variants
-2. **Feature Extraction**: Extracts features from all samples
-3. **Model Training**: Trains a classifier to detect plagiarism
-4. **Parameter Optimization**: Finds optimal weights and thresholds
-5. **Evaluation**: Evaluates model performance on test data
-
-## Customization
-
-### Adjusting Similarity Threshold
-
-The default similarity threshold is determined by model training, but you can override it:
-
-```python
-detector = OptimizedPlagiarismDetector(model_dir="trained_model", similarity_threshold=0.8)
-```
-
-### Adding New Detection Techniques
-
-The modular design allows for adding new detection techniques by extending the appropriate classes.
+*   Text comparison between multiple documents.
+*   Similarity scoring.
+*   Report generation.
 
 ## Directory Structure
 
 ```
-plagiarism_detector/
-├── app.py                  # Flask web application
-├── detector.py             # Core detection logic
-├── dataset_generator.py    # Training dataset generator
-├── model_trainer.py        # Model training and optimization
-├── run_training.py         # Complete training pipeline
-├── apply_model.py          # CLI for applying trained models
-├── templates/              # HTML templates
-│   ├── base.html
-│   ├── index.html
-│   ├── compare.html
-│   └── results.html
-├── static/                 # Static assets
-│   ├── css/
-│   └── js/
-└── results/                # Output directory for results
+.
+├── plagiarism_detector/    # Main application logic
+├── results/                # Output directory for plagiarism reports
+├── .gitignore              # Specifies intentionally untracked files that Git should ignore
+├── requirements.txt        # Project dependencies
+├── run.bat                 # Batch script to run the application on Windows
+├── run.py                  # Main Python script to execute the plagiarism detector
+├── plagiarism_detector.log # Log file for the application
+└── README.md               # This file
 ```
 
-## License
+## Installation
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd <repository-directory>
+    ```
+
+2.  **Create a virtual environment (recommended):**
+    ```bash
+    python -m venv venv
+    ```
+    Activate the virtual environment:
+    *   On Windows:
+        ```bash
+        .\venv\Scripts\activate
+        ```
+    *   On macOS/Linux:
+        ```bash
+        source venv/bin/activate
+        ```
+
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Usage
+
+To run the plagiarism detector, execute the `run.py` script or the `run.bat` batch file:
+
+Using Python:
+```bash
+python run.py
+```
+
+Or, on Windows, using the batch file:
+```bash
+run.bat
+```
+
+The results of the plagiarism check will be stored in the `results/` directory.
+
+## Technical Details
+
+The plagiarism detection process involves several key steps:
+
+*   **AST Parsing**: The C/C++ source code is first parsed into Abstract Syntax Trees (ASTs) using `clang`. This allows for a structured representation of the code, capturing its syntactic and semantic elements.
+*   **Token Processing**: Tokens are extracted from the source code. These tokens are then filtered, weighted based on significance (e.g., keywords, identifiers), and identifiers can be normalized. Specific C++ patterns like memory management, template usage, and STL usage are also identified.
+*   **Control Flow Graph (CFG) Generation**: For a deeper understanding of the program's logic, Control Flow Graphs are generated from the ASTs. This helps in analyzing the execution paths within the code.
+*   **Similarity Analysis**: Various techniques are employed to compare the processed code representations (ASTs, token sequences, CFGs) to determine similarity scores between documents. This likely includes methods like cosine similarity on TF-IDF vectors of tokens, graph matching for CFGs, and tree edit distance for ASTs.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please fork the repository and submit a pull request with your changes.
 
-## Acknowledgments
+## License
 
-- Thanks to all contributors who have helped with the development of this tool. 
+This project is licensed under the MIT License. 
