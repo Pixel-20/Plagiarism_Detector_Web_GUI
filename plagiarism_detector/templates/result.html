@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Comparison Result - Plagiarism Detection System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .similarity-meter {
+        height: 30px;
+        border-radius: 15px;
+        background-color: #e9ecef;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    
+    .similarity-value {
+        height: 100%;
+        text-align: center;
+        line-height: 30px;
+        color: white;
+        font-weight: bold;
+        transition: width 1s ease-in-out;
+    }
+    
+    .low-similarity {
+        background-color: #28a745;
+    }
+    
+    .medium-similarity {
+        background-color: #ffc107;
+    }
+    
+    .high-similarity {
+        background-color: #dc3545;
+    }
+    
+    .metric-card {
+        transition: transform 0.3s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .warning-box {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+    }
+    
+    .confidence-meter {
+        height: 10px;
+        width: 100%;
+        background-color: #e9ecef;
+        border-radius: 5px;
+        margin-top: 5px;
+    }
+    
+    .confidence-value {
+        height: 100%;
+        background-color: #17a2b8;
+        border-radius: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">Comparison Result</h2>
+                <a href="{{ url_for('compare_files') }}" class="btn btn-light btn-sm">New Comparison</a>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h4>File 1: {{ result.file1 }}</h4>
+                    </div>
+                    <div class="col-md-6">
+                        <h4>File 2: {{ result.file2 }}</h4>
+                    </div>
+                </div>
+                
+                <h3 class="text-center mb-3">Overall Similarity</h3>
+                
+                {% set overall_similarity = result.similarity.overall_similarity * 100 %}
+                {% set similarity_class = "low-similarity" %}
+                {% if overall_similarity >= 70 %}
+                    {% set similarity_class = "high-similarity" %}
+                {% elif overall_similarity >= 40 %}
+                    {% set similarity_class = "medium-similarity" %}
+                {% endif %}
+                
+                <div class="similarity-meter">
+                    <div class="similarity-value {{ similarity_class }}" style="width: {{ overall_similarity }}%">
+                        {{ "%.2f"|format(overall_similarity) }}%
+                    </div>
+                </div>
+                
+                {% if overall_similarity >= 70 %}
+                <div class="warning-box">
+                    <h4 class="text-danger">⚠️ High Similarity Detected</h4>
+                    <p>
+                        The files show a high degree of similarity, which may indicate code plagiarism.
+                        Review the detailed metrics below to understand the specific similarities.
+                    </p>
+                </div>
+                {% endif %}
+                
+                {% if result.similarity.confidence is defined %}
+                <div class="mt-3 mb-4">
+                    <h5>Confidence: {{ "%.2f"|format(result.similarity.confidence * 100) }}%</h5>
+                    <div class="confidence-meter">
+                        <div class="confidence-value" style="width: {{ result.similarity.confidence * 100 }}%"></div>
+                    </div>
+                    <small class="text-muted">Higher confidence indicates more consistent similarity across different metrics</small>
+                </div>
+                {% endif %}
+                
+                <h3 class="mt-4 mb-3">Detailed Metrics</h3>
+                
+                <div class="row">
+                    {% if result.similarity.token_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Token Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.token_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity based on code tokens
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.similarity.sequence_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Sequence Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.sequence_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity in token sequences
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.similarity.tree_edit_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Structure Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.tree_edit_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity in code structure
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.similarity.subtree_hash_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Subtree Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.subtree_hash_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity in code subtrees
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.similarity.structure_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Graph Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.structure_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity in control flow
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.similarity.complexity_similarity is defined %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 metric-card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Complexity Similarity</h5>
+                                <div class="display-4">{{ "%.2f"|format(result.similarity.complexity_similarity * 100) }}%</div>
+                                <p class="card-text text-muted">
+                                    Measures similarity in algorithmic complexity
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="mt-4 text-center">
+                    <a href="{{ url_for('compare_files') }}" class="btn btn-primary">Compare Other Files</a>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                Analysis completed on: {{ result.timestamp }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Animate the similarity meter on page load
+        setTimeout(function() {
+            const similarityValue = document.querySelector('.similarity-value');
+            similarityValue.style.width = similarityValue.textContent.trim().replace('%', '') + '%';
+        }, 100);
+    });
+</script>
+{% endblock %} 

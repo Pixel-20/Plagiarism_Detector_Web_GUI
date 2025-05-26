@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Files - Plagiarism Detection System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .file-upload {
+        position: relative;
+        overflow: hidden;
+        margin: 10px 0;
+        border: 2px dashed #ccc;
+        border-radius: 5px;
+        padding: 20px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .file-upload:hover {
+        border-color: #007bff;
+        background-color: #f8f9fa;
+    }
+    
+    .file-upload input[type="file"] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin: 0;
+        padding: 0;
+        font-size: 20px;
+        cursor: pointer;
+        opacity: 0;
+        filter: alpha(opacity=0);
+        width: 100%;
+        height: 100%;
+    }
+    
+    .file-upload-label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    
+    .file-name {
+        margin-top: 10px;
+        font-style: italic;
+    }
+    
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Compare Files</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Upload two C/C++ files to check for similarity.
+                </p>
+                
+                <form action="{{ url_for('compare_files') }}" method="post" enctype="multipart/form-data" id="compareForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="file1" class="form-label">File 1:</label>
+                                <div class="file-upload" id="file1Upload">
+                                    <span class="file-upload-label">Click or drag file here</span>
+                                    <input type="file" class="form-control" id="file1" name="file1" accept=".c,.cpp,.h,.hpp">
+                                    <div class="file-name" id="file1Name"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="file2" class="form-label">File 2:</label>
+                                <div class="file-upload" id="file2Upload">
+                                    <span class="file-upload-label">Click or drag file here</span>
+                                    <input type="file" class="form-control" id="file2" name="file2" accept=".c,.cpp,.h,.hpp">
+                                    <div class="file-name" id="file2Name"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" id="compareBtn">Compare Files</button>
+                    </div>
+                </form>
+                
+                <div class="loading mt-4" id="loadingIndicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Analyzing files... This may take a moment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // File upload handling
+        const file1Input = document.getElementById('file1');
+        const file2Input = document.getElementById('file2');
+        const file1Name = document.getElementById('file1Name');
+        const file2Name = document.getElementById('file2Name');
+        const compareForm = document.getElementById('compareForm');
+        const compareBtn = document.getElementById('compareBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // File 1 change event
+        file1Input.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                file1Name.textContent = this.files[0].name;
+                document.getElementById('file1Upload').style.borderColor = '#28a745';
+            } else {
+                file1Name.textContent = '';
+                document.getElementById('file1Upload').style.borderColor = '#ccc';
+            }
+        });
+        
+        // File 2 change event
+        file2Input.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                file2Name.textContent = this.files[0].name;
+                document.getElementById('file2Upload').style.borderColor = '#28a745';
+            } else {
+                file2Name.textContent = '';
+                document.getElementById('file2Upload').style.borderColor = '#ccc';
+            }
+        });
+        
+        // Form submission
+        compareForm.addEventListener('submit', function() {
+            if (file1Input.files.length > 0 && file2Input.files.length > 0) {
+                compareBtn.disabled = true;
+                loadingIndicator.style.display = 'block';
+            }
+        });
+    });
+</script>
+{% endblock %} 

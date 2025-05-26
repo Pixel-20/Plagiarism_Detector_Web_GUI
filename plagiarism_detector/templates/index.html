@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Plagiarism Detection System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Welcome to the Plagiarism Detection System</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    This system helps detect code plagiarism in C/C++ files using advanced analysis techniques.
+                </p>
+                
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body text-center">
+                                <h3 class="card-title">Compare Files</h3>
+                                <p class="card-text">Compare two C/C++ files to check for similarity.</p>
+                                <a href="{{ url_for('compare_files') }}" class="btn btn-primary">Compare Files</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-body text-center">
+                                <h3 class="card-title">Analyze Directory</h3>
+                                <p class="card-text">Upload a zip file containing multiple C/C++ files to find similarities.</p>
+                                <a href="{{ url_for('analyze_directory') }}" class="btn btn-primary">Analyze Directory</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h3>How It Works</h3>
+                    <p>
+                        Our plagiarism detection system uses multiple techniques to analyze code:
+                    </p>
+                    <ul>
+                        <li><strong>Token Analysis:</strong> Compares normalized code tokens</li>
+                        <li><strong>AST Comparison:</strong> Analyzes the structure of the code</li>
+                        <li><strong>Pattern Detection:</strong> Identifies common programming patterns</li>
+                        <li><strong>Complexity Metrics:</strong> Compares algorithmic complexity</li>
+                    </ul>
+                    <p>
+                        The system provides a similarity score between 0 and 100%, with higher scores indicating
+                        greater similarity between the code files.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Directory Analysis Results - Plagiarism Detection System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .similarity-cell {
+        font-weight: bold;
+    }
+    
+    .high-similarity {
+        color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+    
+    .medium-similarity {
+        color: #fd7e14;
+        background-color: rgba(253, 126, 20, 0.1);
+    }
+    
+    .low-similarity {
+        color: #28a745;
+        background-color: rgba(40, 167, 69, 0.1);
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 123, 255, 0.1);
+    }
+    
+    .summary-card {
+        transition: transform 0.3s;
+    }
+    
+    .summary-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .pagination {
+        margin-top: 20px;
+    }
+    
+    .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+    
+    .filter-controls {
+        margin-bottom: 20px;
+    }
+    
+    .threshold-slider {
+        width: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">Directory Analysis Results</h2>
+                <a href="{{ url_for('analyze_directory') }}" class="btn btn-light btn-sm">New Analysis</a>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card summary-card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Files Analyzed</h5>
+                                <div class="display-4">{{ results.file_count }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card summary-card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Similarities Found</h5>
+                                <div class="display-4">{{ results.results|length }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card summary-card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">High Similarity Pairs</h5>
+                                <div class="display-4" id="highSimilarityCount">
+                                    {% set high_count = 0 %}
+                                    {% for result in results.results %}
+                                        {% if result.similarity_metrics.overall_similarity >= 0.8 %}
+                                            {% set high_count = high_count + 1 %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {{ high_count }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="filter-controls">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text">Filter</span>
+                                <input type="text" class="form-control" id="fileFilter" placeholder="Search by filename...">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="row align-items-center">
+                                <div class="col-md-4">
+                                    <label for="filterThreshold" class="form-label mb-0">Min Similarity:</label>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="d-flex align-items-center">
+                                        <input type="range" class="form-range threshold-slider me-2" id="filterThreshold" min="0" max="1" step="0.05" value="0">
+                                        <span id="filterThresholdValue">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover" id="resultsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>File 1</th>
+                                <th>File 2</th>
+                                <th>Similarity</th>
+                                <th>Confidence</th>
+                                <th>Token Sim.</th>
+                                <th>Structure Sim.</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for result in results.results %}
+                                {% set overall_similarity = result.similarity_metrics.overall_similarity * 100 %}
+                                {% set similarity_class = "low-similarity" %}
+                                {% if overall_similarity >= 80 %}
+                                    {% set similarity_class = "high-similarity" %}
+                                {% elif overall_similarity >= 50 %}
+                                    {% set similarity_class = "medium-similarity" %}
+                                {% endif %}
+                                
+                                <tr data-similarity="{{ result.similarity_metrics.overall_similarity }}" 
+                                    data-file1="{{ result.file1|basename }}" 
+                                    data-file2="{{ result.file2|basename }}">
+                                    <td>{{ result.file1|basename }}</td>
+                                    <td>{{ result.file2|basename }}</td>
+                                    <td class="similarity-cell {{ similarity_class }}">{{ "%.2f"|format(overall_similarity) }}%</td>
+                                    <td>{{ "%.2f"|format(result.similarity_metrics.confidence * 100) if result.similarity_metrics.confidence is defined else "N/A" }}%</td>
+                                    <td>{{ "%.2f"|format(result.similarity_metrics.token_similarity * 100) if result.similarity_metrics.token_similarity is defined else "N/A" }}%</td>
+                                    <td>{{ "%.2f"|format(result.similarity_metrics.tree_edit_similarity * 100) if result.similarity_metrics.tree_edit_similarity is defined else "N/A" }}%</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary view-details-btn" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#detailsModal"
+                                                data-file1="{{ result.file1|basename }}"
+                                                data-file2="{{ result.file2|basename }}"
+                                                data-similarity="{{ result.similarity_metrics|tojson }}">
+                                            View
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <nav aria-label="Results pagination">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- Pagination will be generated by JavaScript -->
+                    </ul>
+                </nav>
+                
+                <div class="mt-4 text-center">
+                    <a href="{{ url_for('analyze_directory') }}" class="btn btn-primary">Analyze Another Directory</a>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                Analysis completed on: {{ results.timestamp }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="detailsModalLabel">Similarity Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h5 id="modalFile1">File 1</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <h5 id="modalFile2">File 2</h5>
+                    </div>
+                </div>
+                
+                <h4 class="text-center mb-3">Similarity Metrics</h4>
+                
+                <div class="row" id="metricsContainer">
+                    <!-- Metrics will be populated by JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Pagination settings
+        const rowsPerPage = 10;
+        let currentPage = 1;
+        const tableRows = document.querySelectorAll('#resultsTable tbody tr');
+        const totalPages = Math.ceil(tableRows.length / rowsPerPage);
+        
+        // Filter elements
+        const fileFilter = document.getElementById('fileFilter');
+        const filterThreshold = document.getElementById('filterThreshold');
+        const filterThresholdValue = document.getElementById('filterThresholdValue');
+        
+        // Modal elements
+        const detailsModal = document.getElementById('detailsModal');
+        const modalFile1 = document.getElementById('modalFile1');
+        const modalFile2 = document.getElementById('modalFile2');
+        const metricsContainer = document.getElementById('metricsContainer');
+        
+        // Initialize pagination
+        function setupPagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            
+            // Previous button
+            const prevLi = document.createElement('li');
+            prevLi.className = 'page-item' + (currentPage === 1 ? ' disabled' : '');
+            const prevLink = document.createElement('a');
+            prevLink.className = 'page-link';
+            prevLink.href = '#';
+            prevLink.textContent = 'Previous';
+            prevLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentPage > 1) {
+                    currentPage--;
+                    showPage(currentPage);
+                    setupPagination();
+                }
+            });
+            prevLi.appendChild(prevLink);
+            pagination.appendChild(prevLi);
+            
+            // Page numbers
+            const maxPages = Math.min(totalPages, 5);
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(startPage + maxPages - 1, totalPages);
+            
+            if (endPage - startPage < maxPages - 1) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageLi = document.createElement('li');
+                pageLi.className = 'page-item' + (i === currentPage ? ' active' : '');
+                const pageLink = document.createElement('a');
+                pageLink.className = 'page-link';
+                pageLink.href = '#';
+                pageLink.textContent = i;
+                pageLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    currentPage = i;
+                    showPage(currentPage);
+                    setupPagination();
+                });
+                pageLi.appendChild(pageLink);
+                pagination.appendChild(pageLi);
+            }
+            
+            // Next button
+            const nextLi = document.createElement('li');
+            nextLi.className = 'page-item' + (currentPage === totalPages ? ' disabled' : '');
+            const nextLink = document.createElement('a');
+            nextLink.className = 'page-link';
+            nextLink.href = '#';
+            nextLink.textContent = 'Next';
+            nextLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    showPage(currentPage);
+                    setupPagination();
+                }
+            });
+            nextLi.appendChild(nextLink);
+            pagination.appendChild(nextLi);
+        }
+        
+        // Show current page
+        function showPage(page) {
+            const visibleRows = Array.from(tableRows).filter(row => {
+                const file1 = row.getAttribute('data-file1').toLowerCase();
+                const file2 = row.getAttribute('data-file2').toLowerCase();
+                const similarity = parseFloat(row.getAttribute('data-similarity'));
+                const filterText = fileFilter.value.toLowerCase();
+                
+                return (file1.includes(filterText) || file2.includes(filterText)) && 
+                       similarity >= parseFloat(filterThreshold.value);
+            });
+            
+            const startIndex = (page - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, visibleRows.length);
+            
+            tableRows.forEach(row => row.style.display = 'none');
+            
+            for (let i = startIndex; i < endIndex; i++) {
+                if (visibleRows[i]) {
+                    visibleRows[i].style.display = '';
+                }
+            }
+            
+            // Update high similarity count
+            updateHighSimilarityCount();
+        }
+        
+        // Filter event handlers
+        fileFilter.addEventListener('input', function() {
+            currentPage = 1;
+            showPage(currentPage);
+            setupPagination();
+        });
+        
+        filterThreshold.addEventListener('input', function() {
+            filterThresholdValue.textContent = Math.round(this.value * 100) + '%';
+            currentPage = 1;
+            showPage(currentPage);
+            setupPagination();
+        });
+        
+        // Update high similarity count based on filters
+        function updateHighSimilarityCount() {
+            const visibleRows = Array.from(tableRows).filter(row => {
+                const file1 = row.getAttribute('data-file1').toLowerCase();
+                const file2 = row.getAttribute('data-file2').toLowerCase();
+                const similarity = parseFloat(row.getAttribute('data-similarity'));
+                const filterText = fileFilter.value.toLowerCase();
+                
+                return (file1.includes(filterText) || file2.includes(filterText)) && 
+                       similarity >= parseFloat(filterThreshold.value) &&
+                       similarity >= 0.8;
+            });
+            
+            document.getElementById('highSimilarityCount').textContent = visibleRows.length;
+        }
+        
+        // Modal detail view
+        document.querySelectorAll('.view-details-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const file1 = this.getAttribute('data-file1');
+                const file2 = this.getAttribute('data-file2');
+                const similarityData = JSON.parse(this.getAttribute('data-similarity'));
+                
+                modalFile1.textContent = file1;
+                modalFile2.textContent = file2;
+                
+                // Clear previous metrics
+                metricsContainer.innerHTML = '';
+                
+                // Add overall similarity
+                addMetricCard('Overall Similarity', 
+                              (similarityData.overall_similarity * 100).toFixed(2) + '%',
+                              'Weighted combination of all metrics');
+                
+                // Add confidence if available
+                if (similarityData.confidence !== undefined) {
+                    addMetricCard('Confidence', 
+                                  (similarityData.confidence * 100).toFixed(2) + '%',
+                                  'Consistency across different metrics');
+                }
+                
+                // Add token similarity if available
+                if (similarityData.token_similarity !== undefined) {
+                    addMetricCard('Token Similarity', 
+                                  (similarityData.token_similarity * 100).toFixed(2) + '%',
+                                  'Based on normalized code tokens');
+                }
+                
+                // Add sequence similarity if available
+                if (similarityData.sequence_similarity !== undefined) {
+                    addMetricCard('Sequence Similarity', 
+                                  (similarityData.sequence_similarity * 100).toFixed(2) + '%',
+                                  'Based on token sequences');
+                }
+                
+                // Add tree edit similarity if available
+                if (similarityData.tree_edit_similarity !== undefined) {
+                    addMetricCard('Structure Similarity', 
+                                  (similarityData.tree_edit_similarity * 100).toFixed(2) + '%',
+                                  'Based on code structure');
+                }
+                
+                // Add subtree hash similarity if available
+                if (similarityData.subtree_hash_similarity !== undefined) {
+                    addMetricCard('Subtree Similarity', 
+                                  (similarityData.subtree_hash_similarity * 100).toFixed(2) + '%',
+                                  'Based on code subtrees');
+                }
+                
+                // Add structure similarity if available
+                if (similarityData.structure_similarity !== undefined) {
+                    addMetricCard('Graph Similarity', 
+                                  (similarityData.structure_similarity * 100).toFixed(2) + '%',
+                                  'Based on control flow');
+                }
+                
+                // Add complexity similarity if available
+                if (similarityData.complexity_similarity !== undefined) {
+                    addMetricCard('Complexity Similarity', 
+                                  (similarityData.complexity_similarity * 100).toFixed(2) + '%',
+                                  'Based on algorithmic complexity');
+                }
+            });
+        });
+        
+        function addMetricCard(title, value, description) {
+            const col = document.createElement('div');
+            col.className = 'col-md-6 mb-3';
+            
+            const card = document.createElement('div');
+            card.className = 'card h-100';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body text-center';
+            
+            const cardTitle = document.createElement('h5');
+            cardTitle.className = 'card-title';
+            cardTitle.textContent = title;
+            
+            const cardValue = document.createElement('div');
+            cardValue.className = 'display-6';
+            cardValue.textContent = value;
+            
+            const cardText = document.createElement('p');
+            cardText.className = 'card-text text-muted small';
+            cardText.textContent = description;
+            
+            cardBody.appendChild(cardTitle);
+            cardBody.appendChild(cardValue);
+            cardBody.appendChild(cardText);
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            
+            metricsContainer.appendChild(col);
+        }
+        
+        // Initialize the page
+        setupPagination();
+        showPage(currentPage);
+    });
+</script>
+{% endblock %} 

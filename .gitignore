@@ -1,0 +1,11 @@
+results/
+
+code_logic.txt
+
+plagiarism_detector.log
+
+!plagiarism_detector/
+
+plagiarism_detector/__pycache__
+
+plagiarism_detector/uploads

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Analyze Directory - Plagiarism Detection System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .file-upload {
+        position: relative;
+        overflow: hidden;
+        margin: 10px 0;
+        border: 2px dashed #ccc;
+        border-radius: 5px;
+        padding: 20px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .file-upload:hover {
+        border-color: #007bff;
+        background-color: #f8f9fa;
+    }
+    
+    .file-upload input[type="file"] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin: 0;
+        padding: 0;
+        font-size: 20px;
+        cursor: pointer;
+        opacity: 0;
+        filter: alpha(opacity=0);
+        width: 100%;
+        height: 100%;
+    }
+    
+    .file-upload-label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    
+    .file-name {
+        margin-top: 10px;
+        font-style: italic;
+    }
+    
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    
+    .threshold-slider {
+        width: 100%;
+    }
+    
+    .threshold-value {
+        font-weight: bold;
+        color: #007bff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0">Analyze Directory</h2>
+            </div>
+            <div class="card-body">
+                <p class="lead">
+                    Upload a ZIP file containing multiple C/C++ files to detect similarities across the codebase.
+                </p>
+                
+                <form action="{{ url_for('analyze_directory') }}" method="post" enctype="multipart/form-data" id="analyzeForm">
+                    <div class="mb-4">
+                        <label for="directory" class="form-label">ZIP File:</label>
+                        <div class="file-upload" id="directoryUpload">
+                            <span class="file-upload-label">Click or drag ZIP file here</span>
+                            <input type="file" class="form-control" id="directory" name="directory" accept=".zip">
+                            <div class="file-name" id="directoryName"></div>
+                        </div>
+                        <small class="text-muted">Upload a ZIP file containing your C/C++ files</small>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="threshold" class="form-label">Similarity Threshold: <span id="thresholdValue" class="threshold-value">70%</span></label>
+                        <input type="range" class="form-range threshold-slider" id="threshold" name="threshold" min="0.1" max="1.0" step="0.05" value="0.7">
+                        <small class="text-muted">Files with similarity above this threshold will be reported</small>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" id="analyzeBtn">Analyze Files</button>
+                    </div>
+                </form>
+                
+                <div class="loading mt-4" id="loadingIndicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Analyzing files... This may take several minutes for large directories.</p>
+                </div>
+                
+                <div class="mt-4">
+                    <h4>How It Works</h4>
+                    <p>
+                        The system will analyze all C/C++ files in the uploaded ZIP file and compare them against each other to find similarities.
+                        The analysis includes:
+                    </p>
+                    <ul>
+                        <li>Token-based comparison</li>
+                        <li>Abstract Syntax Tree (AST) analysis</li>
+                        <li>Control flow graph comparison</li>
+                        <li>Algorithmic complexity analysis</li>
+                    </ul>
+                    <p>
+                        Results will show pairs of files with similarity scores above the selected threshold.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // File upload handling
+        const directoryInput = document.getElementById('directory');
+        const directoryName = document.getElementById('directoryName');
+        const analyzeForm = document.getElementById('analyzeForm');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const threshold = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        
+        // Directory change event
+        directoryInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                directoryName.textContent = this.files[0].name;
+                document.getElementById('directoryUpload').style.borderColor = '#28a745';
+            } else {
+                directoryName.textContent = '';
+                document.getElementById('directoryUpload').style.borderColor = '#ccc';
+            }
+        });
+        
+        // Threshold slider
+        threshold.addEventListener('input', function() {
+            thresholdValue.textContent = Math.round(this.value * 100) + '%';
+        });
+        
+        // Form submission
+        analyzeForm.addEventListener('submit', function() {
+            if (directoryInput.files.length > 0) {
+                analyzeBtn.disabled = true;
+                loadingIndicator.style.display = 'block';
+            }
+        });
+    });
+</script>
+{% endblock %} 
